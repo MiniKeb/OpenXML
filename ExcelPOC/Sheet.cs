@@ -1,10 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Linq;
 using DocumentFormat.OpenXml;
-using DocumentFormat.OpenXml.Drawing.Diagrams;
 using DocumentFormat.OpenXml.Spreadsheet;
 
 namespace ExcelPOC
@@ -24,9 +22,13 @@ namespace ExcelPOC
 
         public string SheetName { get; }
 
+        public int ColumnCount => mappings.Count;
+
+        #region Map Methods
+
         public Sheet<TData> Map(string columnName, Func<TData, dynamic> propertyExtractor)
         {
-            return Map(columnName, null, propertyExtractor, null);
+            return Map(columnName, string.Empty, propertyExtractor, null);
         }
 
         public Sheet<TData> Map(string columnName, string columnTitle, Func<TData, dynamic> propertyExtractor)
@@ -36,18 +38,45 @@ namespace ExcelPOC
 
         public Sheet<TData> Map(string columnName, Func<TData, dynamic> propertyExtractor, string format)
         {
-            return Map(columnName, null, propertyExtractor, format);
+            return Map(columnName, string.Empty, propertyExtractor, format);
         }
 
-        public Sheet<TData> Map(string columnName, string columnTitle, Func<TData, dynamic> propertyExtractor, string format)
+        public Sheet<TData> Map(string columnName, string columnTitle, Func<TData, dynamic> propertyExtractor,
+            string format)
         {
             mappings.Add(new Mapping(columnName, columnTitle, propertyExtractor, format));
             return this;
         }
 
+        #endregion
+        
         public void SetData(IEnumerable<TData> datasource)
         {
             this.datasource = datasource;
+        }
+
+        public Columns GetColumns()
+        {
+            var columns = new Columns();
+            uint index = 1;
+            foreach (var mapping in mappings)
+            {
+                var maxLength = 200;
+
+                var optimalWidth = Math.Max(datasource.Max(d => GetValue(d, mapping).Length), mapping.ColumnTitle.Length);
+
+                var column = new Column()
+                {
+                    Min = index,
+                    Max = index,
+                    Width = Math.Min(maxLength, optimalWidth + 5),
+                    CustomWidth = true
+                };
+                columns.Append(column);
+                index++;
+            }
+
+            return columns;
         }
 
         SheetData ISheet.GetSheetData()
@@ -82,6 +111,7 @@ namespace ExcelPOC
             {
                 header.Append(new Cell()
                 {
+                    StyleIndex = 2,
                     CellReference = mapping.ColumnName + rowIndex,
                     CellValue = new CellValue(mapping.ColumnTitle),
                     DataType = CellValues.String
@@ -99,19 +129,23 @@ namespace ExcelPOC
 
             foreach (var mapping in mappings)
             {
-                var dataProperty = mapping.DataExtractor(data);
-                string value = mapping.Format == null
-                    ? dataProperty.ToString()
-                    : dataProperty.ToString(mapping.Format);
-
                 row.Append(new Cell()
                 {
+                    StyleIndex = 1,
                     CellReference = mapping.ColumnName + rowIndex,
-                    CellValue = new CellValue(value),
+                    CellValue = new CellValue(GetValue(data, mapping)),
                     DataType = CellValues.String //GetCellType(dataProperty)
                 });
             }
             return row;
+        }
+
+        private static string GetValue(TData data, Mapping mapping)
+        {
+            var dataProperty = mapping.DataExtractor(data);
+            return mapping.Format == null
+                ? dataProperty.ToString()
+                : dataProperty.ToString(mapping.Format);
         }
 
         private static EnumValue<CellValues> GetCellType(dynamic data)
