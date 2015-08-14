@@ -1,13 +1,20 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
-using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Spreadsheet;
 
-namespace ExcelPOC
+namespace ExcelLibrary
 {
-    [SuppressMessage("ReSharper", "PossiblyMistakenUseOfParamsMethod")]
+    internal interface ISheet
+    {
+        string SheetName { get; }
+
+        SheetData GetSheetData();
+
+        Columns GetColumns();
+    }
+
     public class Sheet<TData> : ISheet
     {
         private readonly List<Mapping> mappings;
@@ -134,8 +141,8 @@ namespace ExcelPOC
                     StyleIndex = 1,
                     CellReference = mapping.ColumnName + rowIndex,
                     CellValue = new CellValue(GetValue(data, mapping)),
-                    DataType = CellValues.String //GetCellType(dataProperty)
-                });
+                    DataType = CellValues.String //GetCellType(data)
+            });
             }
             return row;
         }
@@ -144,11 +151,11 @@ namespace ExcelPOC
         {
             var dataProperty = mapping.DataExtractor(data);
             return mapping.Format == null
-                ? dataProperty.ToString()
-                : dataProperty.ToString(mapping.Format);
+                ? dataProperty.ToString(CultureInfo.InvariantCulture)
+                : dataProperty.ToString(mapping.Format, CultureInfo.InvariantCulture);
         }
 
-        private static EnumValue<CellValues> GetCellType(dynamic data)
+        private static CellValues GetCellType(TData data)
         {
             Type dataType = data.GetType();
             switch (dataType.Name)
